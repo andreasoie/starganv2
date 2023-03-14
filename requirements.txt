@@ -1,0 +1,10 @@
+torch
+torchvision
+opencv-python==4.1.2.30
+ffmpeg-python==0.2.0
+scikit-image==0.16.2
+pillow
+scipy
+tqdm==4.43.0
+munch==2.5.0
+wandb
