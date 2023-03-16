@@ -11,11 +11,11 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 import copy
 import math
 
-from munch import Munch
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from munch import Munch
 
 from core.wing import FAN
 
@@ -298,7 +298,7 @@ def build_model(args):
                      style_encoder=style_encoder_ema)
 
     if args.w_hpf > 0:
-        fan = FAN(fname_pretrained=args.wing_path).eval)
+        fan = FAN(fname_pretrained=args.wing_path).eval()
         fan.get_heatmap = fan.module.get_heatmap
         nets.fan = fan
         nets_ema.fan = fan
