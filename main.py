@@ -180,10 +180,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    # NAME = "stargan-v2"
+    if args.mode == "train":
+        pass
+        # NAME = "stargan-v2"
 
-    # os.makedirs(f"snapshots/{NAME}", exist_ok=True)
+        # os.makedirs(f"snapshots/{NAME}", exist_ok=True)
 
-    # wandb.init(project=NAME, entity="andreasoie", resume="allow")
-    # wandb.config.update(args, allow_val_change=True)
+        # wandb.init(project=NAME, entity="andreasoie", resume="allow")
+        # wandb.config.update(args, allow_val_change=True)
     main(args)
