@@ -18,12 +18,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from munch import Munch
+from PIL import Image
 
 import core.utils as utils
 from core.checkpoint import CheckpointIO
 from core.data_loader import InputFetcher
 from core.model import build_model
-from metrics.eval import calculate_metrics
+from metrics.eval import calculate_evaluation, calculate_metrics
 
 # import wandb
 
@@ -214,7 +215,28 @@ class Solver(nn.Module):
         self._load_checkpoint(args.resume_iter)
         calculate_metrics(nets_ema, args, step=resume_iter, mode='latent')
         calculate_metrics(nets_ema, args, step=resume_iter, mode='reference')
+        
+    @torch.no_grad()
+    def evaluate_custom(self):
+        args = self.args
+        nets_ema = self.nets_ema
+        resume_iter = args.resume_iter
+        
+        resume_iters = [20_000, 40_000, 60_000, 80_000, 100_000]
+        
+        for resume_iter in resume_iters:
+            self._load_checkpoint(resume_iter)
+            calculate_evaluation(nets_ema, args, step=resume_iter, mode='reference')
 
+        # eo_images = os.listdir(os.path.join(args.val_img_dir, "optical"))
+        # eo_images.sort()
+        # ir_images = os.listdir(os.path.join(args.val_img_dir, "infrared"))
+        # ir_images.sort()
+        
+        # for eo in eo_images:
+        #     img = Image.open(eo).convert('RGB')
+        #     img = img.resize((256, 256), Image.BICUBIC)
+            
 
 def compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=None, x_ref=None, masks=None):
     assert (z_trg is None) != (x_ref is None)
