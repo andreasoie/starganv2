@@ -8,16 +8,15 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
-from pathlib import Path
-from itertools import chain
 import os
 import random
+from itertools import chain
+from pathlib import Path
 
+import numpy as np
+import torch
 from munch import Munch
 from PIL import Image
-import numpy as np
-
-import torch
 from torch.utils import data
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
@@ -118,7 +117,6 @@ def get_train_loader(root, which='source', img_size=256,
                            num_workers=num_workers,
                            pin_memory=True,
                            drop_last=True)
-
 
 def get_eval_loader(root, img_size=256, batch_size=32,
                     imagenet_normalize=True, shuffle=True,

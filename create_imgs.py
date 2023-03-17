@@ -30,8 +30,8 @@ plt.figure(figsize=(110, 10))
 
 for idx in tqdm(range(1, 5), desc="Generating images", leave=False):
     # REAL
-    real_image_optical, n_real_image_optical = load_images_from_path(f"data/test_{idx}/val/optical", "RGB")
-    real_image_infrared, n_real_image_infrared = load_images_from_path(f"data/test_{idx}/val/infrared", "L")
+    real_image_optical, n_real_image_optical = load_images_from_path(f"data/test_{idx}/val/optical", mode="RGB")
+    real_image_infrared, n_real_image_infrared = load_images_from_path(f"data/test_{idx}/val/infrared", mode="L")
     assert n_real_image_optical == 1, "There should be only one real image"
     assert n_real_image_infrared == 1, "There should be only one real image"
     
