@@ -12,10 +12,10 @@ import argparse
 import os
 
 import torch
+import wandb
 from munch import Munch
 from torch.backends import cudnn
 
-import wandb
 from core.data_loader import get_test_loader, get_train_loader
 from core.solver import Solver
 
@@ -76,6 +76,8 @@ def main(args):
     elif args.mode == 'align':
         from core.wing import align_faces
         align_faces(args, args.inp_dir, args.out_dir)
+    elif args.mode == 'test':
+        solver.evaluate_custom()
     else:
         raise NotImplementedError
 
@@ -135,7 +137,7 @@ if __name__ == '__main__':
 
     # misc
     parser.add_argument('--mode', type=str, required=True,
-                        choices=['train', 'sample', 'eval', 'align'],
+                        choices=['train', 'sample', 'eval', 'align', "test"],
                         help='This argument is used in solver')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of workers used in DataLoader')
