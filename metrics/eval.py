@@ -11,15 +11,70 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 import os
 import shutil
 from collections import OrderedDict
-from tqdm import tqdm
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
+from core import utils
+from core.data_loader import get_eval_loader
 from metrics.fid import calculate_fid_given_paths
 from metrics.lpips import calculate_lpips_given_images
-from core.data_loader import get_eval_loader
-from core import utils
+
+
+@torch.no_grad()
+def calculate_evaluation(nets, args, step, mode):
+    print('Calculating evaluation metrics...')
+    assert mode in ['latent', 'reference']
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    domains = os.listdir(args.val_img_dir)
+    domains.sort()
+    
+    target_domain = "infrared"
+    source_domain = "optical"
+
+    if mode == 'reference':
+        path_ref = os.path.join(args.val_img_dir, target_domain)
+        loader_ref = get_eval_loader(root=path_ref, img_size=args.img_size, batch_size=args.val_batch_size, imagenet_normalize=False, drop_last=True)
+    path_src = os.path.join(args.val_img_dir, source_domain)
+    loader_src = get_eval_loader(root=path_src, img_size=args.img_size, batch_size=args.val_batch_size, imagenet_normalize=False)
+
+    path_fake = os.path.join(args.eval_dir, "rgb2ir", f"step_{step:06d}")
+    shutil.rmtree(path_fake, ignore_errors=True)
+    os.makedirs(path_fake, exist_ok=True)
+
+    # Load optical images
+    for i, x_src in enumerate(tqdm(loader_src, total=len(loader_src))):
+        N = x_src.size(0)
+        x_src = x_src.to(device)
+        y_trg = torch.tensor([0] * N).to(device)
+
+        if mode == 'latent':
+            z_trg = torch.randn(N, args.latent_dim).to(device)
+            s_trg = nets.mapping_network(z_trg, y_trg)
+        else:
+            try:
+                x_ref = next(iter_ref).to(device)
+            except:
+                iter_ref = iter(loader_ref)
+                x_ref = next(iter_ref).to(device)
+
+            if x_ref.size(0) > N:
+                x_ref = x_ref[:N]
+            s_trg = nets.style_encoder(x_ref, y_trg)
+
+        x_fake = nets.generator(x_src, s_trg, masks=None)
+        filename = os.path.join(path_fake, f"model_{step}_{i}.png")
+        utils.save_image(x_fake, ncol=1, filename=filename)
+        
+    # delete dataloaders
+    del loader_src
+    if mode == 'reference':
+        del loader_ref
+        del iter_ref
+    del nets
+
 
 
 @torch.no_grad()
