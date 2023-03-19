@@ -102,6 +102,10 @@ def get_train_loader(root, which='source', img_size=256,
         transforms.Normalize(mean=[0.5, 0.5, 0.5],
                              std=[0.5, 0.5, 0.5]),
     ])
+    
+    print("Augmentations")
+    print(transform)
+    print("")
 
     if which == 'source':
         dataset = ImageFolder(root, transform)

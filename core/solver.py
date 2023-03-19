@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from munch import Munch
 from PIL import Image
+from torch.optim import lr_scheduler
 
 import core.utils as utils
 from core.checkpoint import CheckpointIO
@@ -28,6 +29,33 @@ from metrics.eval import calculate_evaluation, calculate_metrics
 
 # import wandb
 
+def lambda_rule_by_iter(iteration, iter_init, iter_decay_start, decay_iterations, iter_per_epoch):
+    epoch_decay_start = iter_decay_start // iter_per_epoch
+    epoch_num = (iteration + iter_init) // iter_per_epoch
+    decay_epochs = decay_iterations // iter_per_epoch
+    return 1.0 - max(0, epoch_num + 1 - epoch_decay_start) / float(decay_epochs + 1)
+
+def get_scheduler(optimizer, opt):
+    """Return a learning rate scheduler
+    Parameters:
+        optimizer          -- the optimizer of the network
+        opt (option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions．　
+                              opt.lr_policy is the name of learning rate policy: linear | step | plateau | cosine
+    For 'linear', we keep the same learning rate for the first <opt.n_epochs> epochs
+    and linearly decay the rate to zero over the next <opt.n_epochs_decay> epochs.
+    For other schedulers (step, plateau, and cosine), we use the default PyTorch schedulers.
+    See https://pytorch.org/docs/stable/optim.html for more details.
+    """
+    if opt.lr_policy == 'linear':
+        def lambda_rule_by_iter(iteration, iter_init, iter_decay_start, decay_iterations, iter_per_epoch):
+                epoch_decay_start = iter_decay_start // iter_per_epoch
+                epoch_num = (iteration + iter_init) // iter_per_epoch
+                decay_epochs = decay_iterations // iter_per_epoch
+                return 1.0 - max(0, epoch_num + 1 - epoch_decay_start) / float(decay_epochs + 1)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule_by_iter)
+    else:
+        return NotImplementedError('learning rate policy [%s] is not implemented', opt.lr_policy)
+    return scheduler
 
 def seconds_to_time(seconds: float) -> str:
     hours = seconds // 3600
@@ -117,7 +145,7 @@ class Solver(nn.Module):
             z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
 
             masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
-
+            
             # train the discriminator
             d_loss, d_losses_latent = compute_d_loss(
                 nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
@@ -189,6 +217,12 @@ class Solver(nn.Module):
                 calculate_metrics(nets_ema, args, i+1, mode='reference')
                 # wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
 
+        # adjust learning rate
+        for scheduler in self.schedulers:
+            if self.opt.lr_policy == 'plateau':
+                scheduler.step(self.metric)
+            else:
+                scheduler.step()        
     @torch.no_grad()
     def sample(self, loaders):
         args = self.args

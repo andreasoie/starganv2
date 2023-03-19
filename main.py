@@ -12,13 +12,19 @@ import argparse
 import os
 
 import torch
-import wandb
 from munch import Munch
 from torch.backends import cudnn
 
+import wandb
 from core.data_loader import get_test_loader, get_train_loader
 from core.solver import Solver
 
+
+def lambda_rule_by_iter(iteration, iter_init, iter_decay_start, decay_iterations, iter_per_epoch):
+    epoch_decay_start = iter_decay_start // iter_per_epoch
+    epoch_num = (iteration + iter_init) // iter_per_epoch
+    decay_epochs = decay_iterations // iter_per_epoch
+    return 1.0 - max(0, epoch_num + 1 - epoch_decay_start) / float(decay_epochs + 1)
 
 def str2bool(v):
     return v.lower() in ('true')
