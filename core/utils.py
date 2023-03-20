@@ -23,19 +23,19 @@ import torchvision
 import torchvision.utils as vutils
 from tqdm import tqdm
 
-# import wandb
+import wandb
 
 
 def save_json(json_file, filename):
     with open(filename, 'w') as f:
         json.dump(json_file, f, indent=4, sort_keys=False)
-    # wandb.save(filename)
+    wandb.save(filename)
 
 def print_network(network, name):
     num_params = 0
     for p in network.parameters():
         num_params += p.numel()
-    # print(network)
+    print(network)
     print("Number of parameters of %s: %i" % (name, num_params))
 
 
@@ -58,7 +58,7 @@ def denormalize(x):
 def save_image(x, ncol, filename):
     x = denormalize(x)
     vutils.save_image(x.cpu(), filename, nrow=ncol, padding=0)
-    # wandb.save(filename)
+    wandb.save(filename)
 
 @torch.no_grad()
 def translate_and_reconstruct(nets, args, x_src, y_src, x_ref, y_ref, filename):
