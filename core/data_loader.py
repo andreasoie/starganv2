@@ -76,7 +76,6 @@ class ReferenceDataset(data.Dataset):
     def __len__(self):
         return len(self.targets)
 
-
 def _make_balanced_sampler(labels):
     class_counts = np.bincount(labels)
     class_weights = 1. / class_counts
@@ -84,52 +83,44 @@ def _make_balanced_sampler(labels):
     return WeightedRandomSampler(weights, len(weights))
 
 
-def get_train_loader(root, which='source', img_size=256,
-                     batch_size=8, prob=0.5, num_workers=4):
-    print('Preparing DataLoader to fetch %s images '
-          'during the training phase...' % which)
-
-    crop = transforms.RandomResizedCrop(
-        img_size, scale=[0.8, 1.0], ratio=[0.9, 1.1])
-    rand_crop = transforms.Lambda(
-        lambda x: crop(x) if random.random() < prob else x)
+def get_train_loader(root, which='source', img_size=256, batch_size=8, prob=0.5, num_workers=4):
+    print('Preparing DataLoader to fetch %s images ''during the training phase...' % which)
 
     transform = transforms.Compose([
-        rand_crop,
         transforms.Resize([img_size, img_size]),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                             std=[0.5, 0.5, 0.5]),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
-
+    
     if which == 'source':
         dataset = ImageFolder(root, transform)
     elif which == 'reference':
         dataset = ReferenceDataset(root, transform)
     else:
         raise NotImplementedError
+    
+    # source: all infrared + all optical (2840+2840)= 5680
 
-    sampler = _make_balanced_sampler(dataset.targets)
-    return data.DataLoader(dataset=dataset,
+    # print('Number of %s images: %d' % (which, len(dataset.imgs)))
+
+    # sampler = _make_balanced_sampler(dataset.targets)
+    sampler = None
+    ds = data.DataLoader(dataset=dataset,
                            batch_size=batch_size,
                            sampler=sampler,
+                           shuffle=True,
                            num_workers=num_workers,
                            pin_memory=True,
                            drop_last=True)
+    return ds
+    
 
-def get_eval_loader(root, img_size=256, batch_size=32,
-                    imagenet_normalize=True, shuffle=True,
-                    num_workers=4, drop_last=False):
+def get_eval_loader(root, img_size=256, batch_size=32, imagenet_normalize=True, shuffle=True, num_workers=4, drop_last=False):
     print('Preparing DataLoader for the evaluation phase...')
-    if imagenet_normalize:
-        height, width = 299, 299
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
-    else:
-        height, width = img_size, img_size
-        mean = [0.5, 0.5, 0.5]
-        std = [0.5, 0.5, 0.5]
+    height, width = img_size, img_size
+    mean = [0.5, 0.5, 0.5]
+    std = [0.5, 0.5, 0.5]
 
     transform = transforms.Compose([
         transforms.Resize([img_size, img_size]),
@@ -137,9 +128,7 @@ def get_eval_loader(root, img_size=256, batch_size=32,
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
     ])
-
-    dataset = DefaultDataset(root, transform=transform)
-    return data.DataLoader(dataset=dataset,
+    return data.DataLoader(dataset=DefaultDataset(root, transform=transform),
                            batch_size=batch_size,
                            shuffle=shuffle,
                            num_workers=num_workers,
@@ -149,12 +138,11 @@ def get_eval_loader(root, img_size=256, batch_size=32,
 
 def get_test_loader(root, img_size=256, batch_size=32,
                     shuffle=True, num_workers=4):
-    print('Preparing DataLoader for the generation phase...')
+    # print('Preparing DataLoader for the generation phase...')
     transform = transforms.Compose([
         transforms.Resize([img_size, img_size]),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                             std=[0.5, 0.5, 0.5]),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
 
     dataset = ImageFolder(root, transform)
@@ -172,7 +160,7 @@ class InputFetcher:
         self.latent_dim = latent_dim
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.mode = mode
-
+        
     def _fetch_inputs(self):
         try:
             x, y = next(self.iter)
@@ -206,6 +194,4 @@ class InputFetcher:
             inputs = Munch(x=x, y=y)
         else:
             raise NotImplementedError
-
-        return Munch({k: v.to(self.device)
-                      for k, v in inputs.items()})
+        return Munch({k: v.to(self.device) for k, v in inputs.items()})

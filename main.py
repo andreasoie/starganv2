@@ -12,13 +12,19 @@ import argparse
 import os
 
 import torch
-import wandb
 from munch import Munch
 from torch.backends import cudnn
 
+import wandb
 from core.data_loader import get_test_loader, get_train_loader
 from core.solver import Solver
 
+
+def lambda_rule_by_iter(iteration, iter_init, iter_decay_start, decay_iterations, iter_per_epoch):
+    epoch_decay_start = iter_decay_start // iter_per_epoch
+    epoch_num = (iteration + iter_init) // iter_per_epoch
+    decay_epochs = decay_iterations // iter_per_epoch
+    return 1.0 - max(0, epoch_num + 1 - epoch_decay_start) / float(decay_epochs + 1)
 
 def str2bool(v):
     return v.lower() in ('true')
@@ -122,7 +128,7 @@ if __name__ == '__main__':
                         help='Batch size for training')
     parser.add_argument('--val_batch_size', type=int, default=32,
                         help='Batch size for validation')
-    parser.add_argument('--lr', type=float, default=1e-4,
+    parser.add_argument('--lr', type=float, default=0.0002,
                         help='Learning rate for D, E and G')
     parser.add_argument('--f_lr', type=float, default=1e-6,
                         help='Learning rate for F')
@@ -183,11 +189,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.mode == "train":
-        pass
-        # NAME = "stargan-v2"
-
-        # os.makedirs(f"snapshots/{NAME}", exist_ok=True)
-
-        # wandb.init(project=NAME, entity="andreasoie", resume="allow")
-        # wandb.config.update(args, allow_val_change=True)
+        NAME = "stargan-v2"
+        os.makedirs(f"snapshots/{NAME}", exist_ok=True)
+        wandb.init(project=NAME, entity="andreasoie", resume="allow")
+        wandb.config.update(args, allow_val_change=True)
     main(args)

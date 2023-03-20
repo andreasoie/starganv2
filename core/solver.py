@@ -19,15 +19,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 from munch import Munch
 from PIL import Image
+from torch.optim import lr_scheduler
 
 import core.utils as utils
+import wandb
 from core.checkpoint import CheckpointIO
 from core.data_loader import InputFetcher
 from core.model import build_model
 from metrics.eval import calculate_evaluation, calculate_metrics
 
-# import wandb
 
+def get_scheduler(optimizer, start_iter, mid_iter, extend_iters):
+    print(f"Using linear scheduler from {start_iter} to {mid_iter} to {mid_iter + extend_iters}")
+    def lambda_rule(iteration: int) -> float:
+        return 1.0 - max(0, iteration + start_iter - mid_iter) / float(extend_iters + 1)
+    return lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
 
 def seconds_to_time(seconds: float) -> str:
     hours = seconds // 3600
@@ -51,6 +57,7 @@ class Solver(nn.Module):
 
         if args.mode == 'train':
             self.optims = Munch()
+            self.optimizers = []
             for net in self.nets.keys():
                 if net == 'fan':
                     continue
@@ -59,6 +66,9 @@ class Solver(nn.Module):
                     lr=args.f_lr if net == 'mapping_network' else args.lr,
                     betas=[args.beta1, args.beta2],
                     weight_decay=args.weight_decay)
+                if net != 'mapping_network':
+                    print(f"Using linear scheduler for {net}")
+                    self.optimizers.append(self.optims[net])
 
             self.ckptios = [
                 CheckpointIO(ospj(args.checkpoint_dir, '{:06d}_nets.ckpt'), data_parallel=False, **self.nets),
@@ -95,53 +105,46 @@ class Solver(nn.Module):
         fetcher = InputFetcher(loaders.src, loaders.ref, args.latent_dim, 'train')
         fetcher_val = InputFetcher(loaders.val, None, args.latent_dim, 'val')
         inputs_val = next(fetcher_val)
-
+        
         # resume training if necessary
         if args.resume_iter > 0:
             self._load_checkpoint(args.resume_iter)
 
         # remember the initial value of ds weight
         initial_lambda_ds = args.lambda_ds
+        
+        self.schedulers = [get_scheduler(optimizer, args.resume_iter, args.total_iters, args.total_iters) for optimizer in self.optimizers]
 
         print('Start training...')
-        round_trip_times = []
         start_time = time.time()
-        n_iters_left = args.total_iters - args.resume_iter
-        
-        for i in range(args.resume_iter, args.total_iters):
-            epoch_start_time = time.time()
-            # fetch images and labels
+        for i in range(args.resume_iter, args.total_iters + args.total_iters + 1):
             inputs = next(fetcher)
             x_real, y_org = inputs.x_src, inputs.y_src
             x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
             z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
 
             masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
-
+            
             # train the discriminator
-            d_loss, d_losses_latent = compute_d_loss(
-                nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
+            d_loss, d_losses_latent = compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
             self._reset_grad()
             d_loss.backward()
             optims.discriminator.step()
 
-            d_loss, d_losses_ref = compute_d_loss(
-                nets, args, x_real, y_org, y_trg, x_ref=x_ref, masks=masks)
+            d_loss, d_losses_ref = compute_d_loss(nets, args, x_real, y_org, y_trg, x_ref=x_ref, masks=masks)
             self._reset_grad()
             d_loss.backward()
             optims.discriminator.step()
 
             # train the generator
-            g_loss, g_losses_latent = compute_g_loss(
-                nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
+            g_loss, g_losses_latent = compute_g_loss(nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
             self._reset_grad()
             g_loss.backward()
             optims.generator.step()
             optims.mapping_network.step()
             optims.style_encoder.step()
 
-            g_loss, g_losses_ref = compute_g_loss(
-                nets, args, x_real, y_org, y_trg, x_refs=[x_ref, x_ref2], masks=masks)
+            g_loss, g_losses_ref = compute_g_loss(nets, args, x_real, y_org, y_trg, x_refs=[x_ref, x_ref2], masks=masks)
             self._reset_grad()
             g_loss.backward()
             optims.generator.step()
@@ -155,22 +158,6 @@ class Solver(nn.Module):
             if args.lambda_ds > 0:
                 args.lambda_ds -= (initial_lambda_ds / args.ds_iter)
 
-            # print out log info
-            if (i+1) % args.print_every == 0:
-                elapsed = time.time() - start_time
-                elapsed = str(datetime.timedelta(seconds=elapsed))[:-7]
-                log = "ET [%s], ITER [%i / %i], " % (elapsed, i+1, args.total_iters)
-                all_losses = dict()
-                for loss, prefix in zip([d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref],
-                                        ['D/latent_', 'D/ref_', 'G/latent_', 'G/ref_']):
-                    for key, value in loss.items():
-                        all_losses[prefix + key] = value
-                all_losses['G/lambda_ds'] = args.lambda_ds
-                log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
-                meta = {"iteration": i+1, **all_losses}
-                # wandb.log(meta)
-                print(log)
-
             # generate images for debugging
             if (i+1) % args.sample_every == 0:
                 os.makedirs(args.sample_dir, exist_ok=True)
@@ -179,16 +166,39 @@ class Solver(nn.Module):
             # save model checkpoints
             if (i+1) % args.save_every == 0:
                 for save_path in self._save_checkpoint(step=i+1):
-                    pass
-                    # wandb.save(save_path)
+                    wandb.save(save_path)
 
             # compute FID and LPIPS if necessary
             if (i+1) % args.eval_every == 0:
                 calculate_metrics(nets_ema, args, i+1, mode='latent')
-                # wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
+                wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
                 calculate_metrics(nets_ema, args, i+1, mode='reference')
-                # wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
+                wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
 
+            # adjust G, D, and E
+            for scheduler in self.schedulers:
+                scheduler.step()
+                
+            if (i+1) in [25_000, 50_000, 75_000, 100_000, 125_000]:
+                current_lr = optims.generator.param_groups[0]['lr']
+                wandb.alert(title=f"LR update at iteraton {i+1} !", text=f"LR = {current_lr:.7f}")
+                
+            if (i+1) % args.print_every == 0:
+                current_lr = optims.generator.param_groups[0]['lr']
+                elapsed = time.time() - start_time
+                elapsed = str(datetime.timedelta(seconds=elapsed))[:-7]
+                log = f"ET [{elapsed}], IT [{i+1} / {args.total_iters + args.total_iters + 1}], LR [{current_lr:.7f}], "
+                all_losses = dict()
+                for loss, prefix in zip([d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref],
+                                        ['D/latent_', 'D/ref_', 'G/latent_', 'G/ref_']):
+                    for key, value in loss.items():
+                        all_losses[prefix + key] = value
+                all_losses['G/lambda_ds'] = args.lambda_ds
+                log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
+                meta = {"iteration": i+1, **all_losses}
+                wandb.log(meta)
+                print(log)
+                
     @torch.no_grad()
     def sample(self, loaders):
         args = self.args
