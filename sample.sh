@@ -1,15 +1,14 @@
 
 MODE=test
 
-
 VBS=1
 BS=1
 
 CHECKPOINT=100000
-CHECKPOINT_DIR=/home/andy/Dropbox/largefiles1/logs/starganv2_bs8_gpus3/expr_with_3_gpus_bs8/checkpoints
+CHECKPOINT_DIR=/home/andy/Dropbox/largefiles1/logs/starganv2_bs8/checkpoints
 EVAL_DIR=inferences
-TRAINDIR=/home/andy/Dropbox/largefiles1/complete_dataset_processed/autoferry/train
-VALDIR="/home/andy/Dropbox/largefiles1/complete_dataset_processed/autoferry/study_cases_cherry"
+TRAINDIR=/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/train
+VALDIR="/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/study_cases_cherry"
 
 python3 main.py \
 --mode $MODE \

@@ -40,7 +40,7 @@ def calculate_evaluation(nets, args, step, mode):
     path_src = os.path.join(args.val_img_dir, source_domain)
     loader_src = get_eval_loader(root=path_src, img_size=args.img_size, batch_size=args.val_batch_size, imagenet_normalize=False)
 
-    path_fake = os.path.join(args.eval_dir, "rgb2ir", f"step_{step:06d}")
+    path_fake = os.path.join(args.eval_dir, f"rgb2ir_{mode}", f"step_{step:06d}")
     shutil.rmtree(path_fake, ignore_errors=True)
     os.makedirs(path_fake, exist_ok=True)
 
