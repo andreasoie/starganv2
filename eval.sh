@@ -1,14 +1,13 @@
 
 MODE=test
 
-VBS=1
-BS=1
+VBS=9
+BS=8
 
-CHECKPOINT=100000
 CHECKPOINT_DIR=/home/andy/Dropbox/largefiles1/logs/starganv2_bs8/checkpoints
-EVAL_DIR=inferences
 TRAINDIR=/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/train
-VALDIR="/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/study_cases_cherry"
+VALDIR="/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/val"
+EVAL_DIR=inferences
 
 python3 main.py \
 --mode $MODE \
@@ -21,7 +20,6 @@ python3 main.py \
 --train_img_dir $TRAINDIR \
 --val_img_dir $VALDIR  \
 --checkpoint_dir $CHECKPOINT_DIR \
---resume_iter $CHECKPOINT \
 --eval_dir $EVAL_DIR \
 --batch_size $BS \
 --val_batch_size $VBS \
