@@ -10,6 +10,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import os
+import subprocess
 import time
 from os.path import join as ospj
 
@@ -17,12 +18,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 from munch import Munch
 from PIL import Image
 from torch.optim import lr_scheduler
 
 import core.utils as utils
-import wandb
 from core.checkpoint import CheckpointIO
 from core.data_loader import InputFetcher
 from core.model import build_model
@@ -50,7 +51,7 @@ class Solver(nn.Module):
         self.nets, self.nets_ema = build_model(args)
         # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
         for name, module in self.nets.items():
-            utils.print_network(module, name)
+            # utils.print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
             setattr(self, name + '_ema', module)
@@ -81,7 +82,7 @@ class Solver(nn.Module):
         for name, network in self.named_children():
             # Do not initialize the FAN parameters
             if ('ema' not in name) and ('fan' not in name):
-                print('Initializing %s...' % name)
+                # print('Initializing %s...' % name)
                 network.apply(utils.he_init)
 
     def _save_checkpoint(self, step):
@@ -166,22 +167,28 @@ class Solver(nn.Module):
             # save model checkpoints
             if (i+1) % args.save_every == 0:
                 for save_path in self._save_checkpoint(step=i+1):
-                    wandb.save(save_path)
+                    if args.wandb:
+                        wandb.save(save_path)
+                    else:
+                        pass
 
             # compute FID and LPIPS if necessary
             if (i+1) % args.eval_every == 0:
                 calculate_metrics(nets_ema, args, i+1, mode='latent')
-                wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
+                if args.wandb:
+                    wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
                 calculate_metrics(nets_ema, args, i+1, mode='reference')
-                wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
+                if args.wandb:
+                    wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
 
             # adjust G, D, and E
             for scheduler in self.schedulers:
                 scheduler.step()
                 
-            if (i+1) in [25_000, 50_000, 75_000, 100_000, 125_000]:
-                current_lr = optims.generator.param_groups[0]['lr']
-                wandb.alert(title=f"LR update at iteraton {i+1} !", text=f"LR = {current_lr:.7f}")
+            if args.wandb:
+                if (i+1) in [25_000, 50_000, 75_000, 100_000, 125_000]:
+                    current_lr = optims.generator.param_groups[0]['lr']
+                    wandb.alert(title=f"LR update at iteraton {i+1} !", text=f"LR = {current_lr:.7f}")
                 
             if (i+1) % args.print_every == 0:
                 current_lr = optims.generator.param_groups[0]['lr']
@@ -196,8 +203,9 @@ class Solver(nn.Module):
                 all_losses['G/lambda_ds'] = args.lambda_ds
                 log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
                 meta = {"iteration": i+1, **all_losses}
-                wandb.log(meta)
                 print(log)
+                if args.wandb:
+                    wandb.log(meta)
                 
     @torch.no_grad()
     def sample(self, loaders):
@@ -230,13 +238,30 @@ class Solver(nn.Module):
     def evaluate_custom(self):
         args = self.args
         nets_ema = self.nets_ema
-        resume_iter = args.resume_iter
         
-        resume_iters = [20_000, 40_000, 60_000, 80_000, 100_000]
+        resume_iterations = (np.linspace(10, 140, 14, dtype=int)*1000).tolist()
         
-        for resume_iter in resume_iters:
-            self._load_checkpoint(resume_iter)
-            calculate_evaluation(nets_ema, args, step=resume_iter, mode='reference')
+        for iterations in resume_iterations:
+            self._load_checkpoint(iterations)
+            outdir = calculate_evaluation(nets_ema, args, step=iterations, mode='reference')
+            
+             # Eval FID
+            REAL_IMG_PATH = "/home/andy/Dropbox/largefiles1/autoferry_processed/autoferry/testB"
+            BATCH_SIZE_FID = 9
+            
+            command = ['python', 'fid.py', '--paths', REAL_IMG_PATH, outdir, '--img_size', str(256), '--batch_size', str(BATCH_SIZE_FID)]
+            result = subprocess.run(command, stdout=subprocess.PIPE)
+            score = float(result.stdout.decode('utf-8').split(" ")[-1])
+            
+            println = f"FID [{str(iterations).rjust(3)}]: {score}"
+            print(println)
+            
+            modeltype = "starganv2"
+            with open(f"fid_{modeltype}.txt", "a") as f:
+                f.write(f"{println} \n")
+            
+            # Remove OUTDIR
+            os.system(f"rm -rf {outdir}")
 
         # eo_images = os.listdir(os.path.join(args.val_img_dir, "optical"))
         # eo_images.sort()

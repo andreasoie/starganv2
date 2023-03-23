@@ -9,6 +9,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
 import os
+
 import torch
 
 
@@ -38,7 +39,7 @@ class CheckpointIO(object):
     def load(self, step):
         fname = self.fname_template.format(step)
         assert os.path.exists(fname), fname + ' does not exist!'
-        print('Loading checkpoint from %s...' % fname)
+        # print('Loading checkpoint from %s...' % fname)
         if torch.cuda.is_available():
             module_dict = torch.load(fname)
         else:
