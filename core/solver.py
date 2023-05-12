@@ -11,6 +11,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 import datetime
 import os
 import time
+import warnings
 from os.path import join as ospj
 
 import numpy as np
@@ -27,6 +28,9 @@ from core.checkpoint import CheckpointIO
 from core.data_loader import InputFetcher
 from core.model import build_model
 from metrics.eval import calculate_evaluation, calculate_metrics
+from metrics.fid import calculate_fid_given_paths
+
+warnings.filterwarnings("ignore")
 
 
 def get_scheduler(optimizer, start_iter, mid_iter, extend_iters):
@@ -50,7 +54,7 @@ class Solver(nn.Module):
         self.nets, self.nets_ema = build_model(args)
         # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
         for name, module in self.nets.items():
-            utils.print_network(module, name)
+            # utils.print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
             setattr(self, name + '_ema', module)
@@ -67,7 +71,6 @@ class Solver(nn.Module):
                     betas=[args.beta1, args.beta2],
                     weight_decay=args.weight_decay)
                 if net != 'mapping_network':
-                    print(f"Using linear scheduler for {net}")
                     self.optimizers.append(self.optims[net])
 
             self.ckptios = [
@@ -81,7 +84,6 @@ class Solver(nn.Module):
         for name, network in self.named_children():
             # Do not initialize the FAN parameters
             if ('ema' not in name) and ('fan' not in name):
-                print('Initializing %s...' % name)
                 network.apply(utils.he_init)
 
     def _save_checkpoint(self, step):
@@ -166,7 +168,7 @@ class Solver(nn.Module):
             # save model checkpoints
             if (i+1) % args.save_every == 0:
                 for save_path in self._save_checkpoint(step=i+1):
-                    wandb.save(save_path)
+                    pass # wandb.save(save_path)
 
             # compute FID and LPIPS if necessary
             if (i+1) % args.eval_every == 0:
@@ -227,26 +229,56 @@ class Solver(nn.Module):
         calculate_metrics(nets_ema, args, step=resume_iter, mode='reference')
         
     @torch.no_grad()
+    def run_evaluation(self):
+        args = self.args
+        nets_ema = self.nets_ema
+        resume_iter = args.resume_iter
+        
+        # unfortunately, we dont have the correspnding epochs for the other models
+        resume_iters = np.linspace(10_000, 140_000, 14).astype(int).tolist()
+        
+        for resume_iter in resume_iters:
+            self._load_checkpoint(resume_iter)
+            calculate_evaluation(nets_ema, args, step=resume_iter, mode='reference')
+        
+    @torch.no_grad()
     def evaluate_custom(self):
         args = self.args
         nets_ema = self.nets_ema
         resume_iter = args.resume_iter
         
-        resume_iters = [20_000, 40_000, 60_000, 80_000, 100_000]
+        resume_iters = np.linspace(10_000, 140_000, 14).astype(int).tolist()
         
+        summary = []
+
+        for resume_iter in resume_iters:
+            self._load_checkpoint(resume_iter)
+            path_to_fake = calculate_evaluation(nets_ema, args, step=resume_iter, mode='latent')
+            
+            path_to_real = "/home/andreoi/data/autoferry/testB"
+            paths = [path_to_real, path_to_fake]
+            score = calculate_fid_given_paths(paths, 256, 9)
+            summary.append(score)
+            
+            if os.path.exists(path_to_fake):
+                os.system(f"rm -rf {path_to_fake}")
+            
+        print("FID Summary:")
+        for epoch, score in zip(resume_iters, summary):
+            print(f"FID [{str(epoch).rjust(6)}]: {score}")
+    
+    @torch.no_grad()
+    def generate_cherries(self):
+        args = self.args
+        nets_ema = self.nets_ema
+        resume_iter = args.resume_iter
+        
+        resume_iters = np.linspace(10_000, 140_000, 14).astype(int).tolist()
         for resume_iter in resume_iters:
             self._load_checkpoint(resume_iter)
             calculate_evaluation(nets_ema, args, step=resume_iter, mode='reference')
-
-        # eo_images = os.listdir(os.path.join(args.val_img_dir, "optical"))
-        # eo_images.sort()
-        # ir_images = os.listdir(os.path.join(args.val_img_dir, "infrared"))
-        # ir_images.sort()
         
-        # for eo in eo_images:
-        #     img = Image.open(eo).convert('RGB')
-        #     img = img.resize((256, 256), Image.BICUBIC)
-            
+        
 
 def compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=None, x_ref=None, masks=None):
     assert (z_trg is None) != (x_ref is None)

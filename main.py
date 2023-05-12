@@ -36,7 +36,6 @@ def subdirs(dname):
 
 
 def main(args):
-    print(args)
     cudnn.benchmark = True
     torch.manual_seed(args.seed)
 
@@ -84,6 +83,8 @@ def main(args):
         align_faces(args, args.inp_dir, args.out_dir)
     elif args.mode == 'test':
         solver.evaluate_custom()
+    elif args.mode == 'cherry':
+        solver.generate_cherries()
     else:
         raise NotImplementedError
 
@@ -143,7 +144,7 @@ if __name__ == '__main__':
 
     # misc
     parser.add_argument('--mode', type=str, required=True,
-                        choices=['train', 'sample', 'eval', 'align', "test"],
+                        choices=['train', 'sample', 'eval', 'align', "test", "cherry"],
                         help='This argument is used in solver')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of workers used in DataLoader')

@@ -8,14 +8,15 @@ http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 """
 
-import os
 import argparse
+import os
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from torchvision import models
 from scipy import linalg
+from torchvision import models
+
 from core.data_loader import get_eval_loader
 
 try:
@@ -61,7 +62,6 @@ def frechet_distance(mu, cov, mu2, cov2):
 
 @torch.no_grad()
 def calculate_fid_given_paths(paths, img_size=256, batch_size=50):
-    print('Calculating FID given paths %s and %s...' % (paths[0], paths[1]))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     inception = InceptionV3().eval().to(device)
     loaders = [get_eval_loader(path, img_size, batch_size) for path in paths]
@@ -69,7 +69,7 @@ def calculate_fid_given_paths(paths, img_size=256, batch_size=50):
     mu, cov = [], []
     for loader in loaders:
         actvs = []
-        for x in tqdm(loader, total=len(loader)):
+        for x in tqdm(loader, total=len(loader), leave=False):
             actv = inception(x.to(device))
             actvs.append(actv)
         actvs = torch.cat(actvs, dim=0).cpu().detach().numpy()

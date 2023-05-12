@@ -24,28 +24,27 @@ from metrics.lpips import calculate_lpips_given_images
 
 @torch.no_grad()
 def calculate_evaluation(nets, args, step, mode):
-    print('Calculating evaluation metrics...')
     assert mode in ['latent', 'reference']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     domains = os.listdir(args.val_img_dir)
     domains.sort()
     
-    target_domain = "infrared"
-    source_domain = "optical"
+    target_domain = "testB" if "study_cases" in args.val_img_dir else "infrared"
+    source_domain = "testA" if "study_cases" in args.val_img_dir else "optical"
 
     if mode == 'reference':
         path_ref = os.path.join(args.val_img_dir, target_domain)
-        loader_ref = get_eval_loader(root=path_ref, img_size=args.img_size, batch_size=args.val_batch_size, imagenet_normalize=False, drop_last=True)
+        loader_ref = get_eval_loader(root=path_ref, img_size=args.img_size, batch_size=args.val_batch_size, shuffle=False, imagenet_normalize=False, drop_last=False)
     path_src = os.path.join(args.val_img_dir, source_domain)
-    loader_src = get_eval_loader(root=path_src, img_size=args.img_size, batch_size=args.val_batch_size, imagenet_normalize=False)
+    loader_src = get_eval_loader(root=path_src, img_size=args.img_size, batch_size=args.val_batch_size, shuffle=False, imagenet_normalize=False, drop_last=False)
 
-    path_fake = os.path.join(args.eval_dir, f"rgb2ir_{mode}", f"step_{step:06d}")
+    path_fake = os.path.join(args.eval_dir, f"step_{step:06d}")
     shutil.rmtree(path_fake, ignore_errors=True)
     os.makedirs(path_fake, exist_ok=True)
 
     # Load optical images
-    for i, x_src in enumerate(tqdm(loader_src, total=len(loader_src))):
+    for i, x_src in enumerate(tqdm(loader_src, total=len(loader_src), desc=f"Eval {str(step).zfill(6)}")):
         N = x_src.size(0)
         x_src = x_src.to(device)
         y_trg = torch.tensor([0] * N).to(device)
@@ -74,8 +73,7 @@ def calculate_evaluation(nets, args, step, mode):
         del loader_ref
         del iter_ref
     del nets
-
-
+    
 
 @torch.no_grad()
 def calculate_metrics(nets, args, step, mode):
