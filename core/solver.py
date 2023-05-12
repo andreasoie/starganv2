@@ -10,6 +10,7 @@ Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 import datetime
 import os
+import subprocess
 import time
 import warnings
 from os.path import join as ospj
@@ -54,6 +55,7 @@ class Solver(nn.Module):
         self.nets, self.nets_ema = build_model(args)
         # below setattrs are to make networks be children of Solver, e.g., for self.to(self.device)
         for name, module in self.nets.items():
+            # utils.print_network(module, name)
             # utils.print_network(module, name)
             setattr(self, name, module)
         for name, module in self.nets_ema.items():
@@ -173,17 +175,20 @@ class Solver(nn.Module):
             # compute FID and LPIPS if necessary
             if (i+1) % args.eval_every == 0:
                 calculate_metrics(nets_ema, args, i+1, mode='latent')
-                wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
+                if args.wandb:
+                    wandb.alert(title="FID calculation!", text="Just finished calculating Latent-FID!")
                 calculate_metrics(nets_ema, args, i+1, mode='reference')
-                wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
+                if args.wandb:
+                    wandb.alert(title="FID calculation!", text="Just finished calculating Reference-FID!")
 
             # adjust G, D, and E
             for scheduler in self.schedulers:
                 scheduler.step()
                 
-            if (i+1) in [25_000, 50_000, 75_000, 100_000, 125_000]:
-                current_lr = optims.generator.param_groups[0]['lr']
-                wandb.alert(title=f"LR update at iteraton {i+1} !", text=f"LR = {current_lr:.7f}")
+            if args.wandb:
+                if (i+1) in [25_000, 50_000, 75_000, 100_000, 125_000]:
+                    current_lr = optims.generator.param_groups[0]['lr']
+                    wandb.alert(title=f"LR update at iteraton {i+1} !", text=f"LR = {current_lr:.7f}")
                 
             if (i+1) % args.print_every == 0:
                 current_lr = optims.generator.param_groups[0]['lr']
@@ -198,8 +203,9 @@ class Solver(nn.Module):
                 all_losses['G/lambda_ds'] = args.lambda_ds
                 log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
                 meta = {"iteration": i+1, **all_losses}
-                wandb.log(meta)
                 print(log)
+                if args.wandb:
+                    wandb.log(meta)
                 
     @torch.no_grad()
     def sample(self, loaders):

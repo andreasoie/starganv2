@@ -122,7 +122,6 @@ def get_eval_loader(root, img_size=256, batch_size=32, imagenet_normalize=True, 
     std = [0.5, 0.5, 0.5]
 
     transform = transforms.Compose([
-        transforms.Resize([img_size, img_size]),
         transforms.Resize([height, width]),
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std)
@@ -135,8 +134,7 @@ def get_eval_loader(root, img_size=256, batch_size=32, imagenet_normalize=True, 
                            drop_last=drop_last)
 
 
-def get_test_loader(root, img_size=256, batch_size=32,
-                    shuffle=True, num_workers=4):
+def get_test_loader(root, img_size=256, batch_size=32, shuffle=True, num_workers=4):
     # print('Preparing DataLoader for the generation phase...')
     transform = transforms.Compose([
         transforms.Resize([img_size, img_size]),

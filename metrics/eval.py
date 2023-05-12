@@ -65,7 +65,7 @@ def calculate_evaluation(nets, args, step, mode):
 
         x_fake = nets.generator(x_src, s_trg, masks=None)
         filename = os.path.join(path_fake, f"model_{step}_{i}.png")
-        utils.save_image(x_fake, ncol=1, filename=filename)
+        utils.save_image(x_fake, ncol=1, filename=filename, args=args)
         
     # delete dataloaders
     del loader_src
@@ -81,7 +81,7 @@ def calculate_metrics(nets, args, step, mode):
     assert mode in ['latent', 'reference']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    domains = os.listdir(args.val_img_dir)
+    domains = os.listdir(args.val_img_dir) # infrared, optical
     domains.sort()
     num_domains = len(domains)
     print('Number of domains: %d' % num_domains)
@@ -89,13 +89,16 @@ def calculate_metrics(nets, args, step, mode):
     lpips_dict = OrderedDict()
     for trg_idx, trg_domain in enumerate(domains):
         src_domains = [x for x in domains if x != trg_domain]
+        
+        # infrared should never be source domain
+        if "infrared" in src_domains:
+            continue
 
         if mode == 'reference':
             path_ref = os.path.join(args.val_img_dir, trg_domain)
             loader_ref = get_eval_loader(root=path_ref,
                                          img_size=args.img_size,
                                          batch_size=args.val_batch_size,
-                                         imagenet_normalize=False,
                                          drop_last=True)
 
         for src_idx, src_domain in enumerate(src_domains):
@@ -103,8 +106,9 @@ def calculate_metrics(nets, args, step, mode):
             loader_src = get_eval_loader(root=path_src,
                                          img_size=args.img_size,
                                          batch_size=args.val_batch_size,
-                                         imagenet_normalize=False)
+                                    )
 
+            
             task = '%s2%s' % (src_domain, trg_domain)
             path_fake = os.path.join(args.eval_dir, task)
             shutil.rmtree(path_fake, ignore_errors=True)
@@ -143,7 +147,7 @@ def calculate_metrics(nets, args, step, mode):
                         filename = os.path.join(
                             path_fake,
                             '%.4i_%.2i.png' % (i*args.val_batch_size+(k+1), j+1))
-                        utils.save_image(x_fake[k], ncol=1, filename=filename)
+                        utils.save_image(x_fake[k], ncol=1, filename=filename, args=args)
 
                 lpips_value = calculate_lpips_given_images(group_of_images)
                 lpips_values.append(lpips_value)
@@ -166,7 +170,7 @@ def calculate_metrics(nets, args, step, mode):
 
     # report LPIPS values
     filename = os.path.join(args.eval_dir, 'LPIPS_%.5i_%s.json' % (step, mode))
-    utils.save_json(lpips_dict, filename)
+    utils.save_json(lpips_dict, filename, args)
 
     # calculate and report fid values
     calculate_fid_for_all_tasks(args, domains, step=step, mode=mode)
@@ -177,6 +181,9 @@ def calculate_fid_for_all_tasks(args, domains, step, mode):
     fid_values = OrderedDict()
     for trg_domain in domains:
         src_domains = [x for x in domains if x != trg_domain]
+        
+        if "infrared" in src_domains:
+            continue
 
         for src_domain in src_domains:
             task = '%s2%s' % (src_domain, trg_domain)
@@ -197,4 +204,4 @@ def calculate_fid_for_all_tasks(args, domains, step, mode):
 
     # report FID values
     filename = os.path.join(args.eval_dir, 'FID_%.5i_%s.json' % (step, mode))
-    utils.save_json(fid_values, filename)
+    utils.save_json(fid_values, filename, args)

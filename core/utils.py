@@ -26,10 +26,11 @@ from tqdm import tqdm
 import wandb
 
 
-def save_json(json_file, filename):
+def save_json(json_file, filename, args):
     with open(filename, 'w') as f:
         json.dump(json_file, f, indent=4, sort_keys=False)
-    # wandb.save(filename)
+    if args.wandb:
+        wandb.save(filename)
 
 def print_network(network, name):
     num_params = 0
@@ -55,10 +56,11 @@ def denormalize(x):
     return out.clamp_(0, 1)
 
 
-def save_image(x, ncol, filename):
+def save_image(x, ncol, filename, args):
     x = denormalize(x)
     vutils.save_image(x.cpu(), filename, nrow=ncol, padding=0)
-    # wandb.save(filename)
+    if args.wandb:
+        wandb.save(filename)
 
 @torch.no_grad()
 def translate_and_reconstruct(nets, args, x_src, y_src, x_ref, y_ref, filename):
@@ -71,7 +73,7 @@ def translate_and_reconstruct(nets, args, x_src, y_src, x_ref, y_ref, filename):
     x_rec = nets.generator(x_fake, s_src, masks=masks)
     x_concat = [x_src, x_ref, x_fake, x_rec]
     x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N, filename)
+    save_image(x_concat, N, filename, args)
     del x_concat
 
 
@@ -96,7 +98,7 @@ def translate_using_latent(nets, args, x_src, y_trg_list, z_trg_list, psi, filen
             x_concat += [x_fake]
 
     x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N, filename)
+    save_image(x_concat, N, filename, args)
     
 
 
@@ -116,7 +118,7 @@ def translate_using_reference(nets, args, x_src, x_ref, y_ref, filename):
         x_concat += [x_fake_with_ref]
 
     x_concat = torch.cat(x_concat, dim=0)
-    save_image(x_concat, N+1, filename)
+    save_image(x_concat, N+1, filename, args)
     del x_concat
 
 

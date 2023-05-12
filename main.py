@@ -12,10 +12,10 @@ import argparse
 import os
 
 import torch
+import wandb
 from munch import Munch
 from torch.backends import cudnn
 
-import wandb
 from core.data_loader import get_test_loader, get_train_loader
 from core.solver import Solver
 
@@ -186,10 +186,12 @@ if __name__ == '__main__':
     parser.add_argument('--sample_every', type=int, default=5000)
     parser.add_argument('--save_every', type=int, default=10000)
     parser.add_argument('--eval_every', type=int, default=50000)
-
+    
+    # use tracking tool
+    parser.add_argument('--wandb', action='store_true')
     args = parser.parse_args()
     
-    if args.mode == "train":
+    if args.wandb:
         NAME = "stargan-v2"
         os.makedirs(f"snapshots/{NAME}", exist_ok=True)
         wandb.init(project=NAME, entity="andreasoie", resume="allow")
